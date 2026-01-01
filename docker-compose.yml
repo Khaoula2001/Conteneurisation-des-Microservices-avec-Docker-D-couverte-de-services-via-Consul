@@ -1,0 +1,114 @@
+version: '3'
+
+services:
+  # Service MySQL
+  mysql:
+    image: mysql:latest
+    container_name: mysql-container1
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3307:3306"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Service Consul
+  consul:
+    image: consul:1.15.4
+    container_name: consul-container
+    restart: always
+    ports:
+      - "8500:8500"
+    networks:
+      - microservices-network
+
+  # Service Gateway
+  gateway-service:
+    build:
+      context: ./gatewayService
+    ports:
+      - "8888:8888"
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      consul:
+        condition: service_started
+    networks:
+      - microservices-network
+    environment:
+      SPRING_CLOUD_CONSUL_HOST: consul
+      SPRING_CLOUD_CONSUL_PORT: 8500
+      SPRING_CLOUD_CONSUL_DISCOVERY_ENABLED: 'true'
+
+  # Service Client
+  client-service:
+    build:
+      context: ./clientService
+    ports:
+      - "8088:8088"
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      consul:
+        condition: service_started
+      gateway-service:
+        condition: service_started
+    networks:
+      - microservices-network
+    environment:
+      SPRING_CLOUD_CONSUL_HOST: consul
+      SPRING_CLOUD_CONSUL_PORT: 8500
+      SPRING_CLOUD_CONSUL_DISCOVERY_ENABLED: 'true'
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/Micro_ClientDB?createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+
+  # Service Voiture
+  voiture-service:
+    build:
+      context: ./voitureService
+    ports:
+      - "8089:8089"
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      consul:
+        condition: service_started
+      gateway-service:
+        condition: service_started
+    networks:
+      - microservices-network
+    environment:
+      SPRING_CLOUD_CONSUL_HOST: consul
+      SPRING_CLOUD_CONSUL_PORT: 8500
+      SPRING_CLOUD_CONSUL_DISCOVERY_ENABLED: 'true'
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/Micro_VoitureDB?createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+
+  # Service phpMyAdmin
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    restart: always
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "8081:80"
+    networks:
+      - microservices-network
+
+networks:
+  microservices-network:
+    driver: bridge
